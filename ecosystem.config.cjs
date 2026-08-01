@@ -3,7 +3,7 @@ module.exports = {
 		{
 			name: 'Video Chat',
 			instances: 'max',
-			script: 'npm run preview'
+			script: './.output/server/index.mjs'
 		}
 	]
 }
