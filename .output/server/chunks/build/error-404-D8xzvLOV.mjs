@@ -92,4 +92,4 @@ _sfc_main.setup = (props, ctx) => {
 var error_404_default = /*#__PURE__*/ _plugin_vue_export_helper_default(_sfc_main, [["__scopeId", "data-v-34f9b9d0"]]);
 
 export { error_404_default as default };
-//# sourceMappingURL=error-404-CfphKN8-.mjs.map
+//# sourceMappingURL=error-404-D8xzvLOV.mjs.map

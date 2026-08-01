@@ -28740,6 +28740,107 @@ function createHooks() {
 	return new Hookable();
 }
 
+function _getAsyncLocalStorage() {
+	return globalThis.AsyncLocalStorage || globalThis.process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
+}
+function createContext$1(opts = {}) {
+	let currentInstance;
+	let isSingleton = false;
+	const checkConflict = (instance) => {
+		if (currentInstance && currentInstance !== instance) throw new Error("Context conflict");
+	};
+	let als;
+	if (opts.asyncContext) {
+		const _AsyncLocalStorage = opts.AsyncLocalStorage || _getAsyncLocalStorage();
+		if (_AsyncLocalStorage) als = new _AsyncLocalStorage();
+		else console.warn("[unctx] `AsyncLocalStorage` is not provided.");
+	}
+	const _wrapInstance = (instance) => als && instance !== null && typeof instance === "object" ? { __unctx_weak: new WeakRef(instance) } : instance;
+	const _unwrapInstance = (store) => store && store.__unctx_weak ? store.__unctx_weak.deref() : store;
+	const _getCurrentInstance = () => {
+		if (als) {
+			const store = als.getStore();
+			if (store !== void 0) return _unwrapInstance(store);
+		}
+		return currentInstance;
+	};
+	return {
+		use: () => {
+			const _instance = _getCurrentInstance();
+			if (_instance === void 0) throw new Error("Context is not available");
+			return _instance;
+		},
+		tryUse: () => {
+			return _getCurrentInstance();
+		},
+		set: (instance, replace) => {
+			if (!replace) checkConflict(instance);
+			currentInstance = instance;
+			isSingleton = true;
+		},
+		unset: () => {
+			currentInstance = void 0;
+			isSingleton = false;
+		},
+		call: (instance, callback) => {
+			checkConflict(instance);
+			currentInstance = instance;
+			try {
+				return als ? als.run(_wrapInstance(instance), callback) : callback();
+			} finally {
+				if (!isSingleton) currentInstance = void 0;
+			}
+		},
+		async callAsync(instance, callback) {
+			currentInstance = instance;
+			const onRestore = () => {
+				currentInstance = instance;
+			};
+			const onLeave = () => currentInstance === instance ? onRestore : void 0;
+			asyncHandlers.add(onLeave);
+			try {
+				const r = als ? als.run(_wrapInstance(instance), callback) : callback();
+				if (!isSingleton) currentInstance = void 0;
+				return await r;
+			} finally {
+				asyncHandlers.delete(onLeave);
+			}
+		}
+	};
+}
+function createNamespace(defaultOpts = {}) {
+	const contexts = {};
+	return { get(key, opts = {}) {
+		if (!contexts[key]) contexts[key] = createContext$1({
+			...defaultOpts,
+			...opts
+		});
+		return contexts[key];
+	} };
+}
+const _globalThis = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof global !== "undefined" ? global : {};
+const globalKey = "__unctx__";
+const defaultNamespace = _globalThis[globalKey] || (_globalThis[globalKey] = createNamespace());
+const getContext = (key, opts = {}) => defaultNamespace.get(key, opts);
+const asyncHandlersKey = "__unctx_async_handlers__";
+const asyncHandlers = _globalThis[asyncHandlersKey] || (_globalThis[asyncHandlersKey] = /* @__PURE__ */ new Set());
+function executeAsync(function_) {
+	const restores = [];
+	for (const leaveHandler of asyncHandlers) {
+		const restore = leaveHandler();
+		if (restore) restores.push(restore);
+	}
+	const restore = () => {
+		for (const restore of restores) restore();
+	};
+	let awaitable = function_();
+	if (awaitable && typeof awaitable === "object" && "catch" in awaitable) awaitable = awaitable.catch((error) => {
+		restore();
+		throw error;
+	});
+	return [awaitable, restore];
+}
+
 var captureStackTrace = Error.captureStackTrace;
 var Diagnostic = class Diagnostic extends Error {
 	name;
@@ -28879,108 +28980,6 @@ var appDiagnostics = /* #__PURE__ */ defineProdDiagnostics({
 	docsBase,
 	reporters: prodReporters
 });
-//#endregion
-//#region node_modules/.pnpm/unctx@3.0.0_magic-string@1.1.0_oxc-parser@0.140.0_rolldown@1.2.1_unplugin@3.3.0_esbuild_c0b0af5c6d89ca379ddd6fcc5aedf1a0/node_modules/unctx/dist/index.mjs
-function _getAsyncLocalStorage() {
-	return globalThis.AsyncLocalStorage || globalThis.process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
-}
-function createContext$1(opts = {}) {
-	let currentInstance;
-	let isSingleton = false;
-	const checkConflict = (instance) => {
-		if (currentInstance && currentInstance !== instance) throw new Error("Context conflict");
-	};
-	let als;
-	if (opts.asyncContext) {
-		const _AsyncLocalStorage = opts.AsyncLocalStorage || _getAsyncLocalStorage();
-		if (_AsyncLocalStorage) als = new _AsyncLocalStorage();
-		else console.warn("[unctx] `AsyncLocalStorage` is not provided.");
-	}
-	const _wrapInstance = (instance) => als && instance !== null && typeof instance === "object" ? { __unctx_weak: new WeakRef(instance) } : instance;
-	const _unwrapInstance = (store) => store && store.__unctx_weak ? store.__unctx_weak.deref() : store;
-	const _getCurrentInstance = () => {
-		if (als) {
-			const store = als.getStore();
-			if (store !== void 0) return _unwrapInstance(store);
-		}
-		return currentInstance;
-	};
-	return {
-		use: () => {
-			const _instance = _getCurrentInstance();
-			if (_instance === void 0) throw new Error("Context is not available");
-			return _instance;
-		},
-		tryUse: () => {
-			return _getCurrentInstance();
-		},
-		set: (instance, replace) => {
-			if (!replace) checkConflict(instance);
-			currentInstance = instance;
-			isSingleton = true;
-		},
-		unset: () => {
-			currentInstance = void 0;
-			isSingleton = false;
-		},
-		call: (instance, callback) => {
-			checkConflict(instance);
-			currentInstance = instance;
-			try {
-				return als ? als.run(_wrapInstance(instance), callback) : callback();
-			} finally {
-				if (!isSingleton) currentInstance = void 0;
-			}
-		},
-		async callAsync(instance, callback) {
-			currentInstance = instance;
-			const onRestore = () => {
-				currentInstance = instance;
-			};
-			const onLeave = () => currentInstance === instance ? onRestore : void 0;
-			asyncHandlers.add(onLeave);
-			try {
-				const r = als ? als.run(_wrapInstance(instance), callback) : callback();
-				if (!isSingleton) currentInstance = void 0;
-				return await r;
-			} finally {
-				asyncHandlers.delete(onLeave);
-			}
-		}
-	};
-}
-function createNamespace(defaultOpts = {}) {
-	const contexts = {};
-	return { get(key, opts = {}) {
-		if (!contexts[key]) contexts[key] = createContext$1({
-			...defaultOpts,
-			...opts
-		});
-		return contexts[key];
-	} };
-}
-var _globalThis = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof global !== "undefined" ? global : {};
-var globalKey = "__unctx__";
-var defaultNamespace = _globalThis[globalKey] || (_globalThis[globalKey] = createNamespace());
-var getContext = (key, opts = {}) => defaultNamespace.get(key, opts);
-var asyncHandlersKey = "__unctx_async_handlers__";
-var asyncHandlers = _globalThis[asyncHandlersKey] || (_globalThis[asyncHandlersKey] = /* @__PURE__ */ new Set());
-function executeAsync(function_) {
-	const restores = [];
-	for (const leaveHandler of asyncHandlers) {
-		const restore = leaveHandler();
-		if (restore) restores.push(restore);
-	}
-	const restore = () => {
-		for (const restore of restores) restore();
-	};
-	let awaitable = function_();
-	if (awaitable && typeof awaitable === "object" && "catch" in awaitable) awaitable = awaitable.catch((error) => {
-		restore();
-		throw error;
-	});
-	return [awaitable, restore];
-}
 //#endregion
 //#region virtual:nuxt:node_modules%2F.cache%2Fnuxt%2F.nuxt%2Fnuxt.config.mjs
 var nuxtLinkDefaults = {
@@ -29172,6 +29171,7 @@ function useSeoMeta$1(input, options = {}) {
 	});
 }
 
+//#region node_modules/.pnpm/nuxt@4.5.1_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0_supports-color@10.2.2___@_2710ed8ff482fdf48e9bb1212f06470a/node_modules/nuxt/dist/app/utils.js
 globalThis._importMeta_.url.replace(/\/app\/.*$/, "/");
 //#endregion
 //#region node_modules/.pnpm/nuxt@4.5.1_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0_supports-color@10.2.2___@_2710ed8ff482fdf48e9bb1212f06470a/node_modules/nuxt/dist/app/components/injections.js
@@ -29395,7 +29395,7 @@ function freezeHead(head) {
 }
 //#endregion
 //#region node_modules/.pnpm/nuxt@4.5.1_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0_supports-color@10.2.2___@_2710ed8ff482fdf48e9bb1212f06470a/node_modules/nuxt/dist/head/runtime/plugins/unhead.server.js
-var plugin$3 = defineNuxtPlugin({
+var plugin$2 = defineNuxtPlugin({
 	name: "nuxt:head",
 	enforce: "pre",
 	setup(nuxtApp) {
@@ -31198,27 +31198,18 @@ var manifestDiagnostics = /* #__PURE__ */ defineProdDiagnostics({
 });
 //#endregion
 //#region virtual:nuxt:node_modules%2F.cache%2Fnuxt%2F.nuxt%2Froute-rules.mjs
-var sensitiveMatcher = /* @__PURE__ */ (() => {
-	const $0 = { prerender: true };
-	return (m, p) => {
-		let r = [];
-		if (p.charCodeAt(p.length - 1) === 47) p = p.slice(0, -1);
-		if (p === "") r.push({ data: $0 });
-		else if (p.charCodeAt(p.length - 1) === 47) {
-			if (p === "/") r.push({ data: $0 });
-		}
-		return r.reverse();
-	};
-})();
+var sensitiveMatcher = (m, p) => {
+	return [];
+};
 var foldedMatcher = sensitiveMatcher;
-var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Froute_rules_default = (path) => virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Frouter_options_default.sensitive ? defu({}, ...sensitiveMatcher("", path).map((r) => r.data).reverse()) : defu({}, ...foldedMatcher("", typeof path === "string" ? path.toLowerCase() : path).map((r) => r.data).reverse());
+var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Froute_rules_default = (path) => virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Frouter_options_default.sensitive ? defu({}, ...sensitiveMatcher().map((r) => r.data).reverse()) : defu({}, ...foldedMatcher("", typeof path === "string" ? path.toLowerCase() : path).map((r) => r.data).reverse());
 //#endregion
 //#region node_modules/.pnpm/nuxt@4.5.1_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0_supports-color@10.2.2___@_2710ed8ff482fdf48e9bb1212f06470a/node_modules/nuxt/dist/app/composables/manifest.js
-var routeRulesMatcher$1 = virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Froute_rules_default;
+var routeRulesMatcher = virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Froute_rules_default;
 function getRouteRules(arg) {
 	const path = typeof arg === "string" ? arg : arg.path;
 	try {
-		return routeRulesMatcher$1(path);
+		return routeRulesMatcher(path);
 	} catch (e) {
 		manifestDiagnostics.NUXT_E5003({
 			path,
@@ -31244,7 +31235,7 @@ var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Froutes_default = [{
 }];
 //#endregion
 //#region node_modules/.pnpm/nuxt@4.5.1_@babel+plugin-syntax-jsx@7.28.6_@babel+core@7.29.0_supports-color@10.2.2___@_2710ed8ff482fdf48e9bb1212f06470a/node_modules/nuxt/dist/pages/runtime/plugins/router.js
-var plugin$2 = defineNuxtPlugin({
+var plugin$1 = defineNuxtPlugin({
 	name: "nuxt:router",
 	enforce: "pre",
 	async setup(nuxtApp) {
@@ -31444,7 +31435,7 @@ var reducers = [
 	["Ref", (data) => (0, vue_exports.isRef)(data) && data.value],
 	["Reactive", (data) => (0, vue_exports.isReactive)(data) && (0, vue_exports.toRaw)(data)]
 ];
-var plugin$1 = /* @__PURE__ */ defineNuxtPlugin({
+var plugin = /* @__PURE__ */ defineNuxtPlugin({
 	name: "nuxt:revive-payload:server",
 	setup() {
 		for (const [reducer, fn] of reducers) definePayloadReducer(reducer, fn);
@@ -33502,14 +33493,23 @@ function generateShades(key, value, prefix) {
 function generateColor(key, shade) {
 	return `--ui-${key}: var(--ui-color-${key}-${shade});`;
 }
-var colors_default = defineNuxtPlugin(() => {
-	const appConfig = useAppConfig();
-	useNuxtApp();
-	useHead$1({ style: [{
-		innerHTML: (0, vue_exports.computed)(() => {
-			const { neutral, ...colors2 } = appConfig.ui.colors;
-			const prefix = appConfig.ui.prefix;
-			return `@layer theme {
+//#endregion
+//#region virtual:nuxt:node_modules%2F.cache%2Fnuxt%2F.nuxt%2Fplugins.server.mjs
+var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Fplugins_server_default = [
+	plugin$2,
+	plugin$1,
+	plugin,
+	plugin_server_default,
+	plugin_default,
+	virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Fcomponents_plugin_default,
+	defineNuxtPlugin(() => {
+		const appConfig = useAppConfig();
+		useNuxtApp();
+		useHead$1({ style: [{
+			innerHTML: (0, vue_exports.computed)(() => {
+				const { neutral, ...colors2 } = appConfig.ui.colors;
+				const prefix = appConfig.ui.prefix;
+				return `@layer theme {
   :root, :host {
   ${Object.entries(appConfig.ui.colors).map(([key, value]) => generateShades(key, value, prefix)).join("\n  ")}
   }
@@ -33520,25 +33520,11 @@ var colors_default = defineNuxtPlugin(() => {
   ${Object.keys(colors2).map((key) => generateColor(key, 400)).join("\n  ")}
   }
 }`;
-		}),
-		tagPriority: "critical",
-		id: "nuxt-ui-colors"
-	}] });
-});
-var plugin = defineNuxtPlugin(async () => {
-	return;
-});
-//#endregion
-//#region virtual:nuxt:node_modules%2F.cache%2Fnuxt%2F.nuxt%2Fplugins.server.mjs
-var virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Fplugins_server_default = [
-	plugin$3,
-	plugin$2,
-	plugin$1,
-	plugin_server_default,
-	plugin_default,
-	virtual_nuxt_node_modules_2F_cache_2Fnuxt_2F_nuxt_2Fcomponents_plugin_default,
-	colors_default,
-	plugin
+			}),
+			tagPriority: "critical",
+			id: "nuxt-ui-colors"
+		}] });
+	})
 ];
 //#endregion
 //#region node_modules/.pnpm/@vue+compiler-ssr@3.5.40/node_modules/@vue/compiler-ssr/dist/compiler-ssr.cjs.js
@@ -51163,8 +51149,8 @@ var _sfc_main$1 = {
 		const statusText = _error.statusMessage ?? (is404 ? "Page Not Found" : "Internal Server Error");
 		const description = _error.message || _error.toString();
 		const stack = void 0;
-		const _Error404 = (0, vue_exports.defineAsyncComponent)(() => import('../build/error-404-CfphKN8-.mjs'));
-		const _Error = (0, vue_exports.defineAsyncComponent)(() => import('../build/error-500-BAc5iMzN.mjs'));
+		const _Error404 = (0, vue_exports.defineAsyncComponent)(() => import('../build/error-404-D8xzvLOV.mjs'));
+		const _Error = (0, vue_exports.defineAsyncComponent)(() => import('../build/error-500-mHq1WdP8.mjs'));
 		const ErrorTemplate = is404 ? _Error404 : _Error;
 		return (_ctx, _push, _parent, _attrs) => {
 			_push((0, server_renderer_exports.ssrRenderComponent)((0, vue_exports.unref)(ErrorTemplate), (0, vue_exports.mergeProps)({
