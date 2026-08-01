@@ -1,9 +1,9 @@
 module.exports = {
-  apps: [
-    {
-      name: 'Express Taxi',
-      instances: 'max',
-      script: './.output/server/index.mjs'
-    }
-  ]
+	apps: [
+		{
+			name: 'Video Chat',
+			instances: 'max',
+			script: 'npm run preview'
+		}
+	]
 }
