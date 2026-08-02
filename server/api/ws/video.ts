@@ -1,72 +1,103 @@
 import { defineWebSocketHandler } from 'h3'
 
+type SignalMessage =
+	| {
+			type: 'offer'
+			room: string
+			data: any
+	  }
+	| {
+			type: 'answer'
+			room: string
+			data: any
+	  }
+	| {
+			type: 'candidate'
+			room: string
+			data: any
+	  }
+
 const rooms = new Map<string, Set<any>>()
 
+function joinRoom(room: string, peer: any) {
+	let clients = rooms.get(room)
+
+	if (!clients) {
+		clients = new Set()
+		rooms.set(room, clients)
+	}
+
+	clients.add(peer)
+
+	peer.room = room
+}
+
+function leaveRoom(peer: any) {
+	const room = peer.room
+
+	if (!room) return
+
+	const clients = rooms.get(room)
+
+	if (!clients) return
+
+	clients.delete(peer)
+
+	if (clients.size === 0) {
+		rooms.delete(room)
+	}
+}
+
 export default defineWebSocketHandler({
-  open(peer) {
-    console.log('Connected')
-  },
+	open(peer) {
+		console.log('WS connected')
+	},
 
-  message(peer: any, message) {
-    const data = JSON.parse(message.text())
+	message(peer, message) {
+		try {
+			const text = typeof message.text === 'function' ? message.text() : new TextDecoder().decode(message.raw)
 
-    switch (data.type) {
-      case 'join': {
-        const room = data.room
+			const payload = JSON.parse(text)
 
-        if (!rooms.has(room)) rooms.set(room, new Set())
+			// первое сообщение
+			// { type:'join', room:'demo' }
 
-        const clients = rooms.get(room)!
+			if (payload.type === 'join') {
+				joinRoom(payload.room, peer)
 
-        peer.room = room
+				const clients = rooms.get(payload.room)!
 
-        clients.add(peer)
+				if (clients.size === 2) {
+					for (const client of clients) {
+						client.send(
+							JSON.stringify({
+								type: 'ready'
+							})
+						)
+					}
+				}
 
-        for (const client of clients) {
-          if (client !== peer) {
-            client.send(
-              JSON.stringify({
-                type: 'peer-joined'
-              })
-            )
-          }
-        }
+				return
+			}
 
-        break
-      }
+			const signal = payload as SignalMessage
 
-      case 'signal': {
-        const clients = rooms.get(peer.room)
+			const clients = rooms.get(signal.room)
 
-        if (!clients) return
+			if (!clients) return
 
-        for (const client of clients) {
-          if (client !== peer) {
-            client.send(
-              JSON.stringify({
-                type: 'signal',
-                signal: data.signal
-              })
-            )
-          }
-        }
+			for (const client of clients) {
+				if (client !== peer) {
+					client.send(JSON.stringify(signal))
+				}
+			}
+		} catch (e) {
+			console.error(e)
+		}
+	},
 
-        break
-      }
-    }
-  },
-
-  close(peer: any) {
-    const room = peer.room
-
-    if (!room) return
-
-    const clients = rooms.get(room)
-
-    if (!clients) return
-
-    clients.delete(peer)
-
-    if (!clients.size) rooms.delete(room)
-  }
+	close(peer) {
+		leaveRoom(peer)
+		console.log('WS disconnected')
+	}
 })

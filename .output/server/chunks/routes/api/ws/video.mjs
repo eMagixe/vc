@@ -21,54 +21,62 @@ import '@iconify/utils';
 import 'consola';
 
 const rooms = /* @__PURE__ */ new Map();
+function joinRoom(room, peer) {
+  let clients = rooms.get(room);
+  if (!clients) {
+    clients = /* @__PURE__ */ new Set();
+    rooms.set(room, clients);
+  }
+  clients.add(peer);
+  peer.room = room;
+}
+function leaveRoom(peer) {
+  const room = peer.room;
+  if (!room) return;
+  const clients = rooms.get(room);
+  if (!clients) return;
+  clients.delete(peer);
+  if (clients.size === 0) {
+    rooms.delete(room);
+  }
+}
 const video = defineWebSocketHandler({
   open(peer) {
-    console.log("Connected");
+    console.log("WS connected");
   },
   message(peer, message) {
-    const data = JSON.parse(message.text());
-    switch (data.type) {
-      case "join": {
-        const room = data.room;
-        if (!rooms.has(room)) rooms.set(room, /* @__PURE__ */ new Set());
-        const clients = rooms.get(room);
-        peer.room = room;
-        clients.add(peer);
-        for (const client of clients) {
-          if (client !== peer) {
+    try {
+      const text = typeof message.text === "function" ? message.text() : new TextDecoder().decode(message.raw);
+      const payload = JSON.parse(text);
+      if (payload.type === "join") {
+        joinRoom(payload.room, peer);
+        const clients2 = rooms.get(payload.room);
+        if (clients2.size === 2) {
+          for (const client of clients2) {
             client.send(
               JSON.stringify({
-                type: "peer-joined"
+                type: "ready"
               })
             );
           }
         }
-        break;
+        return;
       }
-      case "signal": {
-        const clients = rooms.get(peer.room);
-        if (!clients) return;
-        for (const client of clients) {
-          if (client !== peer) {
-            client.send(
-              JSON.stringify({
-                type: "signal",
-                signal: data.signal
-              })
-            );
-          }
+      const signal = payload;
+      const clients = rooms.get(signal.room);
+      if (!clients) return;
+      for (const client of clients) {
+        if (client !== peer) {
+          client.send(JSON.stringify(signal));
         }
-        break;
       }
+    } catch (e) {
+      console.error(e);
     }
   },
   close(peer) {
-    const room = peer.room;
-    if (!room) return;
-    const clients = rooms.get(room);
-    if (!clients) return;
-    clients.delete(peer);
-    if (!clients.size) rooms.delete(room);
+    leaveRoom(peer);
+    console.log("WS disconnected");
   }
 });
 
