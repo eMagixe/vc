@@ -1,0 +1,1 @@
+import{C as e,D as t,E as n,N as r,R as i,T as a,j as o,w as s,x as c,z as l}from"#entry";import{t as u}from"./CPCjlaPm.js";import{t as d}from"./Cr52KFog.js";var f=t({__name:`index`,setup(t){let f=d();return(t,d)=>{let p=u;return o(),s(c,null,[n(p,{to:`/account`},{default:r(()=>[...d[0]||=[a(`Account`,-1)]]),_:1}),e(`div`,null,l(i(f).getAge()),1)],64)}}});export{f as default};
